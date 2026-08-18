@@ -21,7 +21,7 @@ def run_verification_test():
 
     plan_payload = {
         "destination": " India",
-        "travel_dates": "2026-11-01 to 2026-11-10",
+        "travel_dates": "2026-09-10 to 2026-09-14",
         "budget_range": "Moderate",
         "travelers_count": 2,
         "interests": [

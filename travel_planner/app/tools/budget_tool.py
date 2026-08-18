@@ -12,7 +12,7 @@ def parse_duration_days(travel_dates: str) -> int:
             d1 = datetime.strptime(dates[0], "%Y-%m-%d")
             d2 = datetime.strptime(dates[1], "%Y-%m-%d")
             delta = d2 - d1
-            return max(1, delta.days)
+            return max(1, delta.days + 1)
     except Exception as e:
         logger.warning(f"Could not parse duration from dates '{travel_dates}': {e}. Using default of 5 days.")
     return 5

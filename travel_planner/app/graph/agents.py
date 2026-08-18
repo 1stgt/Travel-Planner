@@ -19,7 +19,7 @@ def get_llm():
     if settings.default_llm_provider == "openai" and settings.openai_api_key:
         return ChatOpenAI(model="gpt-4o-mini", api_key=settings.openai_api_key, temperature=0.2)
     elif settings.groq_api_key:
-        return ChatGroq(model="qwen/qwen3.6-27b", api_key=settings.groq_api_key, temperature=0.2, max_tokens=4096)
+        return ChatGroq(model="openai/gpt-oss-20b", api_key=settings.groq_api_key, temperature=0.2, max_tokens=4096)
     elif settings.openai_api_key:
         return ChatOpenAI(model="gpt-4o-mini", api_key=settings.openai_api_key, temperature=0.2)
     return None
@@ -83,6 +83,19 @@ def research_agent(state: TravelPlanState) -> Dict[str, Any]:
         "status": "research_completed"
     }
 
+def calculate_calendar_days(travel_dates: str) -> int:
+    import re
+    from datetime import datetime
+    try:
+        dates = re.findall(r"\d{4}-\d{2}-\d{2}", travel_dates)
+        if len(dates) == 2:
+            d1 = datetime.strptime(dates[0], "%Y-%m-%d")
+            d2 = datetime.strptime(dates[1], "%Y-%m-%d")
+            return (d2 - d1).days + 1
+    except Exception:
+        pass
+    return 5
+
 # Node 3: Planner Agent - Combines inputs, allocates budgets, curates places, and generates itinerary draft
 def planner_agent(state: TravelPlanState) -> Dict[str, Any]:
     destination = state["destination"]
@@ -96,6 +109,7 @@ def planner_agent(state: TravelPlanState) -> Dict[str, Any]:
     # Calculate budget details and match interests to dining/attractions
     budget_allocation = allocate_budget(budget_range, travelers_count, travel_dates)
     curated_spots = curate_recommendations(destination, interests, budget_range)
+    calendar_days = calculate_calendar_days(travel_dates)
     
     # Format a dense weather overview and final budget limits
     weather_info = research_data.get("weather", {})
@@ -127,13 +141,14 @@ def planner_agent(state: TravelPlanState) -> Dict[str, Any]:
         
         user_prompt = (
             f"Destination: {resolved_name}\n"
-            f"Dates: {travel_dates} ({budget_allocation['duration_days']} days) | Travelers: {travelers_count} | Class: {budget_range}\n"
+            f"Dates: {travel_dates} (Duration: {calendar_days} calendar days) | Travelers: {travelers_count} | Class: {budget_range}\n"
             f"Interests: {interests_str}\n"
             f"Budget: {budget_str}\n"
             f"Weather: {weather_brief}\n"
             f"Curation Dining:\n{curated_dining}\n"
             f"Curation Attractions:\n{curated_attractions}\n"
             f"Web context:\n{search_brief}\n"
+            f"\nStrict Instruction: Generate exactly one itinerary section for every calendar date from the start date through the end date inclusive (exactly {calendar_days} sections, labeled 'Day 1', 'Day 2', ..., 'Day {calendar_days}'). Never stop early, omit dates, or combine multiple dates into one section. For each day, include: date, morning, afternoon, evening, weather consideration, and transportation when relevant. Keep descriptions concise but complete.\n"
         )
         
         # If revising, attach only the structural skeleton of the previous draft to save tokens
@@ -156,6 +171,15 @@ def planner_agent(state: TravelPlanState) -> Dict[str, Any]:
             draft = re.sub(r"(?is)^thinking process:.*?\n", "", draft).strip()
             if len(draft) < 200:
                 raise ValueError("LLM generated output is empty or truncated during reasoning.")
+                
+            # Post-generation day validation
+            missing_days = []
+            for d in range(1, calendar_days + 1):
+                pattern = rf"(?i)day\s*{d}\b"
+                if not re.search(pattern, draft):
+                    missing_days.append(f"Day {d}")
+            if missing_days:
+                logger.error(f"Validation Warning: Generated itinerary is missing sections for: {', '.join(missing_days)}")
         except Exception as e:
             logger.error(f"LLM planning failed: {e}. Falling back to template plan.")
             draft = generate_template_itinerary(resolved_name, travel_dates, budget_allocation, curated_spots, weather_brief, user_feedback)
@@ -204,10 +228,11 @@ def finalizer_node(state: TravelPlanState) -> Dict[str, Any]:
     travel_dates = state["travel_dates"]
     
     budget_allocation = allocate_budget(budget_range, travelers_count, travel_dates)
+    calendar_days = calculate_calendar_days(travel_dates)
     
     budget_summary = (
         f"\n\n### Budget Summary ({budget_allocation['budget_tier']})\n"
-        f"- **Duration**: {budget_allocation['duration_days']} Days\n"
+        f"- **Duration**: {calendar_days} Days\n"
         f"- **Accommodation**: ${budget_allocation['accommodation_total_usd']:,} USD ({budget_allocation['rooms_allocated']} rooms)\n"
         f"- **Dining**: ${budget_allocation['dining_total_usd']:,} USD\n"
         f"- **Transportation**: ${budget_allocation['transportation_total_usd']:,} USD\n"
@@ -215,6 +240,10 @@ def finalizer_node(state: TravelPlanState) -> Dict[str, Any]:
         f"- **Emergency contingency (10%)**: ${budget_allocation['emergency_fund_usd']:,} USD\n"
         f"- **Grand Total Estimated**: ${budget_allocation['grand_total_usd']:,} USD\n"
     )
+    
+    # Enforce correct budget summary by stripping any LLM hallucinated blocks
+    import re
+    draft = re.split(r"(?i)###?\s*Budget\s*Summary", draft)[0].strip()
     
     header = (
         f"# FINAL TRIP PLAN: {destination.upper()}\n"
@@ -240,12 +269,12 @@ def generate_template_itinerary(
     weather_brief: str,
     user_feedback: str = ""
 ) -> str:
-    duration = budget["duration_days"]
+    calendar_days = calculate_calendar_days(travel_dates)
     dining = curated.get("dining", [])
     attractions = curated.get("attractions", [])
     
     itinerary_days = []
-    for day in range(1, duration + 1):
+    for day in range(1, calendar_days + 1):
         attr_idx = (day - 1) % len(attractions) if attractions else None
         dine_idx = (day - 1) % len(dining) if dining else None
         

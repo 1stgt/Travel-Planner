@@ -2,7 +2,12 @@ import streamlit as st
 import uuid
 import json
 from travel_planner.app.graph.workflow import travel_planner_workflow
-from travel_planner.app.tools import allocate_budget
+from travel_planner.app.tools import (
+    allocate_budget,
+    get_currency_for_destination,
+    get_exchange_rate,
+    CURRENCY_SYMBOLS,
+)
 
 # Set page configuration
 st.set_page_config(
@@ -118,9 +123,12 @@ with tab1:
                 st.session_state.execution_logs = []
                 st.rerun()
         else:
-            # Under Review / Breakpoint State
             st.subheader("Draft Itinerary (Awaiting Approval)")
             st.markdown(values.get("draft_itinerary", ""))
+            
+            if st.checkbox("Show Raw Text / Metadata Details"):
+                st.text_area("Raw Text Itinerary Output", value=values.get("draft_itinerary", ""), height=250)
+                st.json(values)
             
             st.divider()
             st.subheader("User Review / HITL Interaction")
