@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Path, status
+from fastapi.responses import RedirectResponse
 import uuid
 import logging
 from travel_planner.app.models.schemas import (
@@ -18,6 +19,10 @@ app = FastAPI(
     description="A multi-agent stateful travel planner using LangGraph and FastAPI with Human-in-the-Loop approval.",
     version="1.0.0"
 )
+
+@app.get("/", include_in_schema=False)
+def redirect_to_docs():
+    return RedirectResponse(url="/docs")
 
 @app.post("/plan", response_model=PlanResponse, status_code=status.HTTP_201_CREATED)
 def create_plan(request: PlanRequest):

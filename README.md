@@ -65,7 +65,15 @@ Launch the FastAPI development server using Uvicorn:
 ```bash
 uvicorn travel_planner.app.main:app --reload
 ```
-The server will run on `http://127.0.0.1:8000`. You can access interactive Swagger docs at `http://127.0.0.1:8000/docs`.
+The server will run on `http://127.0.0.1:8000`. You can access interactive Swagger docs at `http://127.0.0.1:8000/docs` (with a root redirect mapping `http://127.0.0.1:8000` to `/docs` automatically).
+
+### 4. Run the Streamlit Dashboard (Optional)
+To run the interactive UI dashboard locally:
+```bash
+streamlit run app_ui.py
+```
+A live version of the Streamlit dashboard is also hosted and accessible at:
+👉 **[travelplanner420.streamlit.app](https://travelplanner420.streamlit.app)**
 
 ---
 
